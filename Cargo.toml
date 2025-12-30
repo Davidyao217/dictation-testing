@@ -1,0 +1,46 @@
+[package]
+name = "dictation_app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+whisper-rs = "0.14"
+cpal = "0.15"
+global-hotkey = "0.6"
+tao = "0.30"
+muda = "0.14"
+arboard = "3.4"
+enigo = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+anyhow = "1.0"
+log = "0.4"
+env_logger = "0.11"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
+crossbeam-channel = "0.5"
+parking_lot = "0.12"
+dirs = "5.0"
+hound = "3.5"
+core-graphics = "0.23"
+core-foundation = "0.9"
+cocoa = "0.25"
+objc = "0.2"
+rubato = "0.16"
+voice_activity_detector = "0.2"
+num_cpus = "1.16"
+
+[package.metadata.bundle]
+name = "Dictation"
+identifier = "com.davidyao.dictation"
+category = "public.app-category.productivity"
+short_description = "Voice dictation app"
+osx_minimum_system_version = "10.14"
+
+[package.metadata.bundle.macos]
+LSUIElement = true
+
+[features]
+default = []
+
+[build-dependencies]
+cc = "1.0"
