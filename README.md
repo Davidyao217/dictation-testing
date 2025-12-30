@@ -12,7 +12,7 @@ The 2 goals were: 1. latency and 2. efficiency
 
 
 ## Inspiration
-Heavily inspired by [handy](https://github.com/handy/handy). I wanted to see if I could build a lightweight version of that workflow from scratch using AI agents. 
+Heavily inspired by [handy](https://github.com/cjpais/Handy). I wanted to see if I could build a lightweight version of that workflow from scratch using AI agents. 
 
 ## Features
 - **Global Hotkey**: Press `Cmd+Shift+D` to start/stop recording.
