@@ -3,7 +3,7 @@
 A simple, local voice dictation tool built in Rust. It listens for a global hotkey, records your voice, transcribes it using OpenAI's Whisper (running locally), and types the text into your active window.
 
 ## Context
-This was a pet project to familiarize myself with AI-assisted coding tools. The entire codebase was built with the help of:
+This was a pet project to familiarize myself with AI-assisted coding tools. The codebase was built with the help of:
 - **Antigravity**
 - **Verdant**
 - **Opencoder**
