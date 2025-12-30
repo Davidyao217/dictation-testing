@@ -32,6 +32,7 @@ use crate::model::ModelManager;
 use crate::output::OutputHandler;
 use crate::state::StateManager;
 use crate::tray::TrayIcon;
+use crate::triggers::{TriggerEvent, TriggerMonitor};
 use crate::vad::VadProcessor;
 use crate::worker::{TranscriptionRequest, TranscriptionWorker};
 
@@ -90,6 +91,15 @@ fn main() -> Result<()> {
     let (hotkey_tx, hotkey_rx) = unbounded::<HotkeyEvent>();
     HotkeyHandler::listen(hotkey_tx, hotkey_id);
 
+    // Smart triggers for activity-based prewarming
+    let trigger_monitor = TriggerMonitor::new();
+    let (trigger_tx, trigger_rx) = unbounded::<TriggerEvent>();
+    trigger_monitor.start(trigger_tx);
+
+    // Cooldown configuration
+    const COOLDOWN_SECS: u64 = 5;
+    let mut last_activity = Instant::now();
+
     // Output handler and indicator
     let mut output_handler = OutputHandler::new(config.output_mode)?;
     let indicator = Arc::new(RecordingIndicator::new());
@@ -99,6 +109,7 @@ fn main() -> Result<()> {
 
     log::info!("Dictation App ready. Press Cmd+Shift+D to dictate.");
     log::info!("Recording mode: {:?}", recording_mode);
+    log::info!("Smart triggers enabled ({}s cooldown)", COOLDOWN_SECS);
 
     let check_interval = Duration::from_millis(100);
 
@@ -107,8 +118,29 @@ fn main() -> Result<()> {
 
         match event {
             Event::NewEvents(StartCause::Poll | StartCause::ResumeTimeReached { .. }) => {
+                // Process trigger events (activity-based prewarming)
+                while let Ok(TriggerEvent::Activity) = trigger_rx.try_recv() {
+                    last_activity = Instant::now();
+                    if !audio_capture.is_warm() {
+                        if let Err(e) = audio_capture.prewarm() {
+                            log::warn!("Failed to prewarm audio: {}", e);
+                        }
+                    }
+                }
+
+                // Cooldown check: if no activity for COOLDOWN_SECS, release audio stream
+                if audio_capture.is_warm() 
+                    && !audio_capture.is_recording()
+                    && last_activity.elapsed() > Duration::from_secs(COOLDOWN_SECS) 
+                {
+                    audio_capture.cooldown();
+                }
+
                 // Process hotkey events
                 while let Ok(evt) = hotkey_rx.try_recv() {
+                    // Activity from hotkey press also resets cooldown
+                    last_activity = Instant::now();
+
                     match recording_mode {
                         RecordingMode::PushToTalk => {
                             match evt {

@@ -96,4 +96,61 @@ impl AudioCapture {
     pub fn is_recording(&self) -> bool {
         self.is_recording.load(Ordering::SeqCst)
     }
+
+    /// Pre-warm the audio stream without starting actual recording.
+    /// This creates the stream so it's ready for instant recording start.
+    /// The stream exists but doesn't buffer audio (is_recording is false).
+    pub fn prewarm(&mut self) -> Result<()> {
+        if self.stream.is_some() {
+            // Already warm
+            return Ok(());
+        }
+
+        let buffer = self.buffer.clone();
+        let is_recording = self.is_recording.clone();
+        let channels = self.config.channels as usize;
+
+        let stream = self.device.build_input_stream(
+            &self.config,
+            move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                if is_recording.load(Ordering::SeqCst) {
+                    let mut buf = buffer.lock();
+                    if channels == 1 {
+                        buf.extend_from_slice(data);
+                    } else {
+                        for chunk in data.chunks(channels) {
+                            let mono = chunk.iter().sum::<f32>() / channels as f32;
+                            buf.push(mono);
+                        }
+                    }
+                }
+                // When is_recording is false, we just discard the samples (no CPU cost)
+            },
+            |err| log::error!("Audio stream error: {}", err),
+            None,
+        )?;
+
+        stream.play()?;
+        self.stream = Some(stream);
+        log::info!("Audio prewarmed (stream ready)");
+        Ok(())
+    }
+
+    /// Cool down the audio stream (destroy it) to save resources.
+    /// Safe to call even if not warm or currently recording.
+    pub fn cooldown(&mut self) {
+        if self.is_recording.load(Ordering::SeqCst) {
+            // Don't cooldown while actively recording
+            return;
+        }
+        if self.stream.is_some() {
+            self.stream = None;
+            log::info!("Audio stream cooled down");
+        }
+    }
+
+    /// Check if the audio stream is pre-warmed and ready.
+    pub fn is_warm(&self) -> bool {
+        self.stream.is_some()
+    }
 }

@@ -1,7 +1,13 @@
 use crossbeam_channel::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use core_graphics::event::{CGEventTap, CGEventTapLocation, CGEventTapPlacement, CGEventTapOptions, CGEventType};
+use parking_lot::Mutex;
+
+/// Debounce interval for activity events (milliseconds).
+/// Only one event is sent per this interval to prevent flooding.
+const DEBOUNCE_MS: u64 = 200;
 
 #[derive(Debug, Clone)]
 pub enum TriggerEvent {
@@ -27,6 +33,8 @@ impl TriggerMonitor {
         // Thread for Event Tap (Mouse/Keyboard/Click)
         std::thread::spawn(move || {
             let tx = tx_activity;
+            let last_event = Arc::new(Mutex::new(Instant::now() - Duration::from_millis(DEBOUNCE_MS)));
+            let debounce_duration = Duration::from_millis(DEBOUNCE_MS);
             
             // Monitor mouse movement, mouse clicks, and key down
             let events = vec![
@@ -35,13 +43,21 @@ impl TriggerMonitor {
                 CGEventType::KeyDown,
             ];
 
+            let last_event_clone = last_event.clone();
             let tap = match CGEventTap::new(
                 CGEventTapLocation::HID,
                 CGEventTapPlacement::HeadInsertEventTap,
                 CGEventTapOptions::Default,
                 events,
                 move |_proxy, _etype, _event| {
-                    let _ = tx.send(TriggerEvent::Activity);
+                    let now = Instant::now();
+                    let mut last = last_event_clone.lock();
+                    
+                    // Debounce: only send if enough time has passed
+                    if now.duration_since(*last) >= debounce_duration {
+                        *last = now;
+                        let _ = tx.send(TriggerEvent::Activity);
+                    }
                     None // Don't block the event
                 },
             ) {
@@ -52,7 +68,7 @@ impl TriggerMonitor {
                 }
             };
 
-            log::info!("Event tap started successfully");
+            log::info!("Event tap started successfully (debounce: {}ms)", DEBOUNCE_MS);
             unsafe {
                 let loop_source = tap.mach_port.create_runloop_source(0).expect("Failed to create runloop source");
                 let current_loop = core_foundation::runloop::CFRunLoop::get_current();
@@ -69,3 +85,4 @@ impl TriggerMonitor {
         self.running.store(false, Ordering::SeqCst);
     }
 }
+
